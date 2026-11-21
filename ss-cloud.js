@@ -1,6 +1,6 @@
-// StudySprint cloud sync (Supabase). Firebase still handles login; localStorage stays as a fast cache.
+
 (function () {
-  const API = "https://YOUR-PROJECT-REF.supabase.co/functions/v1/api";   // ← replace
+  const API = "https://wjzzbljuibvominkoavp.supabase.co/functions/v1/payments";   // ← replace
 
   const J = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } };
   const S = (k, v) => localStorage.setItem(k, JSON.stringify(v));
