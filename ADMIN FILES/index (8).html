@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>StudySprint Admin</title>
+<style>
+:root{--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--mute:#64748b;--line:#e2e8f0;--brand:#1d4ed8;--ok:#15803d;--bad:#b91c1c}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+button,input,select{font:inherit}a{color:var(--brand);cursor:pointer;font-weight:600}
+input,select{padding:9px 11px;border:1.5px solid var(--line);border-radius:8px;background:#fff;min-width:0}
+button{padding:9px 14px;border:0;border-radius:8px;background:var(--brand);color:#fff;font-weight:600;cursor:pointer}
+button.alt{background:#e2e8f0;color:var(--ink)}button.bad{background:var(--bad)}button:disabled{opacity:.5}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+#login{max-width:340px;margin:12vh auto;padding:24px;background:var(--card);border-radius:14px;display:grid;gap:10px}
+#login h1{margin:0 0 4px;font-size:20px}
+header{background:#0f172a;color:#fff;padding:10px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+header b{font-size:16px}header .sp{flex:1}header button{background:#334155;padding:6px 10px}
+nav{display:flex;gap:4px;overflow-x:auto;width:100%}nav button{background:transparent;color:#cbd5e1;white-space:nowrap}
+nav button.on{background:var(--brand);color:#fff}
+main{max-width:1100px;margin:0 auto;padding:14px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.card{background:var(--card);border-radius:12px;padding:14px}.card small{color:var(--mute)}.card div{font-size:26px;font-weight:700;margin-top:2px}
+.bar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}.bar input{flex:1;min-width:160px}
+.wrap{background:var(--card);border-radius:12px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:560px}th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:12px;background:#f8fafc}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600;background:#e2e8f0}.tag.g{background:#dcfce7;color:var(--ok)}.tag.r{background:#fee2e2;color:var(--bad)}
+.pg{display:flex;gap:8px;align-items:center;justify-content:center;margin:12px 0;color:var(--mute)}
+#modal{position:fixed;inset:0;background:rgba(15,23,42,.6);display:none;z-index:10;overflow:auto;padding:12px}
+#modal .box{background:var(--card);max-width:760px;margin:0 auto;border-radius:14px;padding:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+label{display:grid;gap:3px;color:var(--mute);font-size:12px}h3{margin:18px 0 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 16px;border-radius:10px;display:none;z-index:20;max-width:90vw}
+.err{color:var(--bad);font-weight:600}
+</style></head><body>
+
+<form id="login" onsubmit="return false">
+  <h1>StudySprint Admin</h1>
+  <input id="em" type="email" placeholder="Admin email" autocomplete="username">
+  <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+  <button id="lb" onclick="A.login()">Sign in</button>
+  <div id="le" class="err"></div>
+</form>
+
+<div id="app" style="display:none">
+  <header><b>StudySprint Admin</b><span class="sp"></span><span id="who"></span><button onclick="A.out()">Sign out</button>
+    <nav id="nav"></nav></header>
+  <main id="view"></main>
+</div>
+<div id="modal" onclick="if(event.target===this)A.close()"><div class="box" id="mbox"></div></div>
+<div id="toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const auth = getAuth(initializeApp({
+  apiKey: "AIzaSyDJ0G4V7PPBT-fcnO9X-jWmqFk5VBUfJlg", authDomain: "studysprint-ke.firebaseapp.com",
+  projectId: "studysprint-ke", appId: "1:460778528637:web:c862fd7c53306ab4f1f614"
+}));
+const API = "https://wjzzbljuibvominkoavp.supabase.co/functions/v1/admin";
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fd = t => t ? new Date(t).toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" }) : "—";
+const toast = m => { const t = $("#toast"); t.textContent = m; t.style.display = "block"; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", 3500); };
+const run = async f => { try { await f(); } catch (e) { toast("❌ " + e.message); } };
+const PLANS = '<option value="S60">2 Months (KSh 50)</option><option value="S120">4 Months (KSh 80)</option><option value="S360">Full Year (KSh 120)</option>';
+
+async function api(action, d = {}) {
+  const r = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + await auth.currentUser.getIdToken() }, body: JSON.stringify({ action, ...d }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error || "Request failed"), { status: r.status });
+  return j;
+}
+const tbl = (h, rows) => `<div class="wrap"><table><tr>${h.map(x => `<th>${x}</th>`).join("")}</tr>${rows.length ? rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${h.length}" style="color:var(--mute)">Nothing here yet.</td></tr>`}</table></div>`;
+const pager = (total, p, fn) => `<div class="pg"><button class="alt" ${p < 1 ? "disabled" : ""} onclick="${fn}(${p - 1})">‹ Prev</button>Page ${p + 1} of ${Math.max(1, Math.ceil(total / 25))} · ${total} total<button class="alt" ${(p + 1) * 25 >= total ? "disabled" : ""} onclick="${fn}(${p + 1})">Next ›</button></div>`;
+
+let role = "", tab = "dash", U = { q: "", f: "all", p: 0 }, P = { pay: 0, codes: 0, audit: 0 };
+
+const views = {
+  async dash() {
+    const s = await api("stats");
+    const c = (l, v) => `<div class="card"><small>${l}</small><div>${v}</div></div>`;
+    return `<div class="cards">${c("Total users", s.users) + c("New (7 days)", s.newWeek) + c("Active subscribers", s.activeSubs) + c("Revenue (KSh)", s.revenue.toLocaleString()) + c("M-Pesa payments", s.payments) + c("Logins (24h)", s.loginsToday) + c("Suspended", s.suspended)}</div>`;
+  },
+  async users() {
+    const d = await api("list-users", { q: U.q, filter: U.f, page: U.p });
+    return `<div class="bar"><input id="q" placeholder="Search name, email or phone" value="${esc(U.q)}" onkeydown="if(event.key==='Enter')A.search()">
+      <select id="f" onchange="A.search()">${["all", "active", "free", "suspended"].map(x => `<option ${U.f === x ? "selected" : ""}>${x}</option>`).join("")}</select><button onclick="A.search()">Search</button></div>` +
+      tbl(["Name", "Email", "Phone", "Plan", "Joined"], d.users.map(u => [`<a onclick="A.user('${esc(u.uid)}')">${esc(u.name)}</a>${u.suspended ? ' <span class="tag r">suspended</span>' : ""}`, esc(u.email), esc(u.phone), u.plan ? `<span class="tag g">${esc(u.plan.plan_label)}</span>` : "Free", fd(u.created_at)])) + pager(d.total, U.p, "A.upage");
+  },
+  async pay() {
+    const d = await api("list-payments", { page: P.pay });
+    return tbl(["Code", "User", "Amount", "Status", "First seen", "Used"], d.rows.map(x => [`<code>${esc(x.tx_code)}</code>`, esc(x.email), x.amount ? "KSh " + x.amount : "—", `<span class="tag ${x.status === "used" ? "g" : ""}">${x.status}</span>`, fd(x.first_seen_at), fd(x.used_at)])) + pager(d.total, P.pay, "A.ppage");
+  },
+  async codes() {
+    const d = await api("list-codes", { page: P.codes });
+    return `<div class="bar"><input id="ce" type="email" placeholder="User email"><select id="cp">${PLANS}</select><input id="ca" type="number" placeholder="Amount paid" style="max-width:130px"><button onclick="A.mkcode()">Create code</button></div><div id="cr" style="margin-bottom:10px;font-weight:700"></div>` +
+      tbl(["Code", "For", "Amount", "Status", "Created", ""], d.rows.map(x => [`<code>${esc(x.display)}</code>`, esc(x.email), "KSh " + x.amount, x.redeemed_by ? `<span class="tag g">redeemed ${fd(x.redeemed_at)}</span>` : '<span class="tag">unused</span>', fd(x.created_at), x.redeemed_by ? "" : `<a onclick="A.delcode('${esc(x.code_norm)}')">Delete</a>`])) + pager(d.total, P.codes, "A.cpage");
+  },
+  async admins() {
+    const d = await api("list-admins"), sup = d.role === "super";
+    return (sup ? `<div class="bar"><input id="ae" type="email" placeholder="Email of the new admin"><button onclick="A.addAdmin()">Add admin</button></div>` : `<p style="color:var(--mute)">Only the super admin can add or remove admins.</p>`) +
+      tbl(["Email", "Role", "Added by", ""], [[esc(d.super), '<span class="tag g">Super admin</span>', "—", "Cannot be removed"], ...d.admins.map(a => [esc(a.email), '<span class="tag">Admin</span>', esc(a.added_by), sup ? `<a onclick="A.rmAdmin('${esc(a.email)}')">Remove</a>` : ""])]);
+  },
+  async audit() {
+    const d = await api("audit", { page: P.audit });
+    return tbl(["When", "Admin", "Action", "Target", "Detail"], d.rows.map(x => [fd(x.created_at), esc(x.actor), esc(x.action), esc(x.target), esc(x.detail)])) + pager(d.total, P.audit, "A.apage");
+  }
+};
+const TABS = { dash: "Dashboard", users: "Users", pay: "M-Pesa", codes: "Codes", admins: "Admins", audit: "Audit log" };
+
+async function show() {
+  $("#nav").innerHTML = Object.entries(TABS).map(([k, v]) => `<button class="${k === tab ? "on" : ""}" onclick="A.go('${k}')">${v}</button>`).join("");
+  $("#view").innerHTML = '<p style="color:var(--mute)">Loading…</p>';
+  try { $("#view").innerHTML = await views[tab](); } catch (e) { $("#view").innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+}
+
+async function userModal(uid) {
+  const d = await api("get-user", { uid }), p = d.profile, now = Date.now();
+  const f = (id, l, v, t = "text") => `<label>${l}<input id="${id}" type="${t}" value="${esc(v)}"></label>`;
+  $("#mbox").innerHTML = `
+    <div class="row"><h2 style="margin:0;flex:1">${esc(p.name)} ${p.suspended ? '<span class="tag r">suspended</span>' : ""}</h2><button class="alt" onclick="A.close()">Close</button></div>
+    <p style="color:var(--mute);margin:4px 0">${esc(p.email)} · joined ${fd(p.created_at)}</p>
+    <div class="grid">${f("un", "Name", p.name) + f("up", "Phone", p.phone) + f("uu", "University", p.university) + f("uy", "Year", p.year) + f("ud", "Free downloads used", p.free_downloads, "number")}
+      <label>Account<select id="us"><option value="0">Active</option><option value="1" ${p.suspended ? "selected" : ""}>Suspended (blocked)</option></select></label></div>
+    <div class="row" style="margin-top:10px"><button onclick="A.saveUser('${esc(uid)}')">Save changes</button><button class="bad" onclick="A.delUser('${esc(uid)}')">Delete user data</button></div>
+    <h3>Subscriptions</h3>
+    ${tbl(["Plan", "Paid", "Via", "Expires", ""], d.subs.map(s => [esc(s.plan_label), "KSh " + s.amount, esc(s.source), `${fd(s.expires_at)} ${new Date(s.expires_at) > now ? '<span class="tag g">active</span>' : '<span class="tag">ended</span>'}`, `<a onclick="A.ext(${s.id},30,'${esc(uid)}')">+30d</a> · <a onclick="A.ext(${s.id},-30,'${esc(uid)}')">−30d</a> · <a onclick="A.revoke(${s.id},'${esc(uid)}')">Revoke</a>`]))}
+    <div class="row" style="margin-top:8px"><select id="gp">${PLANS}<option value="CUSTOM">Custom days</option></select><input id="gd" type="number" placeholder="Days (optional)" style="width:130px"><input id="ga" type="number" placeholder="KSh paid" style="width:110px"><button onclick="A.grant('${esc(uid)}')">Grant plan</button></div>
+    <h3>M-Pesa transactions</h3>${tbl(["Code", "Amount", "Status", "Date"], d.mpesa.map(x => [esc(x.tx_code), x.amount ? "KSh " + x.amount : "—", x.status, fd(x.first_seen_at)]))}
+    <h3>Login history</h3>${tbl(["When", "Device", "Browser"], d.logins.map(l => [fd(l.created_at), esc(l.device), esc(l.browser)]))}
+    <h3>Recent activity</h3>${tbl(["When", "Event", "Detail"], d.activity.map(a => [fd(a.created_at), esc(a.icon + " " + a.title), esc(a.detail)]))}
+    <h3>Opened documents</h3>${tbl(["Document", "Type", "Opens", "Last"], d.downloads.map(x => [esc(x.name), esc(x.cat), x.opens, fd(x.last_opened_at)]))}`;
+  $("#modal").style.display = "block";
+}
+
+const reopen = uid => userModal(uid);
+window.A = {
+  go: k => { tab = k; show(); },
+  close: () => { $("#modal").style.display = "none"; if (tab === "users") show(); },
+  search: () => { U = { q: $("#q").value, f: $("#f").value, p: 0 }; show(); },
+  upage: p => { U.p = p; show(); }, ppage: p => { P.pay = p; show(); }, cpage: p => { P.codes = p; show(); }, apage: p => { P.audit = p; show(); },
+  user: uid => run(() => userModal(uid)),
+  saveUser: uid => run(async () => { await api("update-user", { uid, name: $("#un").value, phone: $("#up").value, university: $("#uu").value, year: $("#uy").value, free_downloads: $("#ud").value, suspended: $("#us").value === "1" }); toast("✅ Saved"); await reopen(uid); }),
+  grant: uid => run(async () => { await api("grant-subscription", { uid, planKey: $("#gp").value, days: $("#gd").value, amount: $("#ga").value || 0 }); toast("✅ Plan granted"); await reopen(uid); }),
+  ext: (id, days, uid) => run(async () => { await api("extend-subscription", { id, days }); await reopen(uid); }),
+  revoke: (id, uid) => confirm("End this subscription now?") && run(async () => { await api("revoke-subscription", { id }); await reopen(uid); }),
+  delUser: uid => confirm("Delete this user's profile, subscriptions and history? This cannot be undone. (Their login still exists — use Suspend to block them.)") && run(async () => { await api("delete-user", { uid }); A.close(); toast("Deleted"); }),
+  mkcode: () => run(async () => { const r = await api("create-code", { email: $("#ce").value, planKey: $("#cp").value, amount: $("#ca").value }); await show(); $("#cr").textContent = "New code: " + r.code; }),
+  delcode: c => confirm("Delete this unused code?") && run(async () => { await api("delete-code", { code: c }); show(); }),
+  addAdmin: () => run(async () => { await api("add-admin", { email: $("#ae").value }); toast("✅ Admin added"); show(); }),
+  rmAdmin: e => confirm("Remove admin " + e + "?") && run(async () => { await api("remove-admin", { email: e }); show(); }),
+  login: () => run(async () => {
+    $("#le").textContent = ""; $("#lb").disabled = true;
+    try { await signInWithEmailAndPassword(auth, $("#em").value.trim().toLowerCase(), $("#pw").value); }
+    catch { $("#le").textContent = "Wrong email or password."; } finally { $("#lb").disabled = false; }
+  }),
+  out: () => signOut(auth)
+};
+
+onAuthStateChanged(auth, async u => {
+  $("#login").style.display = u ? "none" : "grid"; $("#app").style.display = "none";
+  if (!u) return;
+  try {
+    const w = await api("whoami"); role = w.role;
+    $("#who").textContent = w.email + (role === "super" ? " · super admin" : " · admin");
+    $("#app").style.display = "block"; show();
+  } catch (e) {
+    await signOut(auth);
+    $("#login").style.display = "grid";
+    $("#le").textContent = e.status === 403 ? "Access denied. This account is not an admin." : e.message;
+  }
+});
+</script></body></html>
